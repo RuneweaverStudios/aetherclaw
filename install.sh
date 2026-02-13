@@ -140,7 +140,12 @@ if [ -d "$INSTALL_DIR" ]; then
         printf "  ${CYAN}[6]${NC} Cancel / Run existing installation\n"
         printf "\n"
 
-        read -p "  Select option [1-6]: " choice
+        # Read from /dev/tty if stdin is piped
+        if [ -t 0 ]; then
+            read -p "  Select option [1-6]: " choice
+        else
+            read -p "  Select option [1-6]: " choice < /dev/tty
+        fi
         case $choice in
             1)
                 printf "\n${YELLOW}Resetting everything...${NC}\n"
