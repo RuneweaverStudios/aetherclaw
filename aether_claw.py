@@ -480,7 +480,8 @@ def cmd_onboard(args):
         print("\n  🐣 Hatching into TUI...")
         import subprocess
         tui_path = Path(__file__).parent / 'tui.py'
-        os.execv(sys.executable, [sys.executable, str(tui_path)])
+        # Use subprocess with proper stdin connection
+        subprocess.run([sys.executable, str(tui_path)], stdin=None)
     elif hatch == '2':
         print("\n  🐣 Launching Dashboard...")
         import subprocess

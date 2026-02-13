@@ -291,6 +291,35 @@ Respond in plain text (not markdown code blocks unless showing code)."""
     return reply
 
 
+def get_tty_input():
+    """Get input from TTY if stdin is exhausted."""
+    try:
+        return input()
+    except EOFError:
+        # Try to read from /dev/tty
+        try:
+            with open('/dev/tty', 'r') as tty:
+                return tty.readline().rstrip('\n')
+        except:
+            return None
+
+
+def prompt_input(prompt_text: str, default: str = "") -> str:
+    """Prompt for input with fallback to TTY."""
+    try:
+        result = Prompt.ask(prompt_text, default=default)
+        return result.strip() if result else default
+    except EOFError:
+        console.print()
+        console.print("[dim]Reconnecting to terminal...[/]")
+        try:
+            with open('/dev/tty', 'r') as tty:
+                line = tty.readline()
+                return line.strip() if line else default
+        except:
+            return default
+
+
 def main():
     """Main TUI loop."""
     console.clear()
@@ -324,7 +353,7 @@ def main():
 
             # Get input
             console.print()
-            user_input = Prompt.ask("[bold cyan]>[/]").strip()
+            user_input = prompt_input("[bold cyan]>[/]")
 
             if not user_input:
                 continue
@@ -373,7 +402,8 @@ def main():
         except KeyboardInterrupt:
             console.print("\n[yellow]Use /quit to exit[/]")
         except EOFError:
-            break
+            console.print("\n[yellow]stdin exhausted, reopening terminal...[/]")
+            continue
 
 
 if __name__ == "__main__":
