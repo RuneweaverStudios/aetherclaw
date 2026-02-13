@@ -76,13 +76,27 @@ def get_system_status() -> dict:
 
 def render_header() -> Panel:
     """Render the header panel."""
-    title = Text()
-    title.append("Aether-Claw ", style="bold cyan")
-    title.append("v1.0.0", style="dim")
-    title.append(" | ", style="dim")
-    title.append(datetime.now().strftime("%H:%M:%S"), style="green")
+    header_text = f"""[bold cyan]A E T H E R C L A W[/] [dim]v1.0.0[/] [green]{datetime.now().strftime("%H:%M:%S")}[/]"""
+    return Panel(header_text, style="cyan", height=3)
 
-    return Panel(title, style="cyan", height=3)
+
+def render_banner():
+    """Render full ASCII banner."""
+    console.print()
+    console.print("[bold blue]╔════════════════════════════════════════════════════╗[/]")
+    console.print("[bold blue]║[/] [bold cyan]                A E T H E R C L A W                 [/] [bold blue]║[/]")
+    console.print("[bold blue]║[/] [dim]  ───────────────────────────────────────────────  [/][bold blue]║[/]")
+    console.print("[bold blue]║[/] [white]     Secure Swarm-Based Second Brain / Agent        [/][bold blue]║[/]")
+    console.print("[bold blue]║[/] [dim]  Local • Cryptographically Signed Skills • Memory  [/][bold blue]║[/]")
+    console.print("[bold blue]╚════════════════════════════════════════════════════╝[/]")
+    console.print()
+    console.print("""[cyan]   █████╗ ███████╗████████╗██╗  ██╗███████╗██████╗
+  ██╔══██╗██╔════╝╚══██╔══╝██║  ██║██╔════╝██╔══██╗
+  ███████║█████╗     ██║   ███████║█████╗  ██████╔╝
+  ██╔══██║██╔══╝     ██║   ██╔══██║██╔══╝  ██╔══██╗
+  ██║  ██║███████╗   ██║   ██║  ██║███████╗██║  ██║
+  ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝[/]""")
+    console.print()
 
 
 def render_status() -> Panel:
@@ -281,12 +295,9 @@ def main():
     """Main TUI loop."""
     console.clear()
 
-    # Show welcome
-    console.print(Panel.fit(
-        "[bold cyan]Aether-Claw Terminal Interface[/]\n"
-        "[dim]Type /help for commands, or start chatting[/]",
-        style="cyan"
-    ))
+    # Show welcome banner
+    render_banner()
+    console.print("[dim]Type /help for commands, or start chatting[/]")
     console.print()
 
     while True:

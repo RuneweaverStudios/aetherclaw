@@ -13,6 +13,7 @@ RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
 BLUE='\033[0;34m'
+CYAN='\033[0;36m'
 NC='\033[0m' # No Color
 
 # Default install location
@@ -20,13 +21,20 @@ INSTALL_DIR="${HOME}/.aether-claw"
 REPO_URL="https://github.com/RuneweaverStudios/aetherclaw.git"
 
 echo -e "${BLUE}"
-echo "    _    _   _    _    ______   ______   _   _      _     "
-echo "   / \  | \ | |  / \  |  _  \ / |  _  \ | | | |    / \    "
-echo "  / _ \ |  \| | / _ \ | |_) || || |_) || |_| |   / _ \   "
-echo " / ___ \| |\  |/ ___ \|  _ < | ||  _ < |  _  |  / ___ \  "
-echo "/_/   \_\_| \_/_/   \_\_| \_\|_||_| \_\|_| |_| /_/   \_\ "
+echo "╔══════════════════════════════════════════════════╗"
+echo "║                A E T H E R C L A W                 ║"
+echo "║  ───────────────────────────────────────────────  ║"
+echo "║     Secure Swarm-Based Second Brain / Agent        ║"
+echo "║  Local • Cryptographically Signed Skills • Memory  ║"
+echo "╚══════════════════════════════════════════════════╝"
 echo -e "${NC}"
-echo -e "${GREEN}Secure Swarm-Based AI Assistant${NC}"
+echo ""
+echo -e "${CYAN}   █████╗ ███████╗████████╗██╗  ██╗███████╗██████╗ "
+echo "  ██╔══██╗██╔════╝╚══██╔══╝██║  ██║██╔════╝██╔══██╗"
+echo "  ███████║█████╗     ██║   ███████║█████╗  ██████╔╝"
+echo "  ██╔══██║██╔══╝     ██║   ██╔══██║██╔══╝  ██╔══██╗"
+echo "  ██║  ██║███████╗   ██║   ██║  ██║███████╗██║  ██║"
+echo "  ╚═╝  ╚═╝╚══════╝   ╚═╝   ╚═╝  ╚═╝╚══════╝╚═╝  ╚═╝${NC}"
 echo ""
 
 # Check Python
