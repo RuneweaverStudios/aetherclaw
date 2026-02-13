@@ -102,6 +102,7 @@ if [ -d "$INSTALL_DIR" ]; then
         HAS_CONFIG=false
         HAS_SESSIONS=false
         HAS_KEYS=false
+        HAS_TELEGRAM=false
 
         # Check for credentials
         if [ -f "$INSTALL_DIR/.env" ]; then
@@ -109,6 +110,11 @@ if [ -d "$INSTALL_DIR" ]; then
                grep -q "GLM_API_KEY=.\+" "$INSTALL_DIR/.env" 2>/dev/null; then
                 HAS_CREDENTIALS=true
                 printf "  ${GREEN}✓${NC} Credentials found (.env)\n"
+            fi
+            # Check for Telegram
+            if grep -q "TELEGRAM_BOT_TOKEN=.\+" "$INSTALL_DIR/.env" 2>/dev/null; then
+                HAS_TELEGRAM=true
+                printf "  ${GREEN}✓${NC} Telegram bot configured\n"
             fi
         fi
 
@@ -133,18 +139,19 @@ if [ -d "$INSTALL_DIR" ]; then
 
         printf "\n"
         printf "  ${CYAN}[1]${NC} Reinstall fresh (reset everything)\n"
-        printf "  ${CYAN}[2]${NC} Reset credentials only (keep config & sessions)\n"
+        printf "  ${CYAN}[2]${NC} Reset API credentials only (keep config, sessions & Telegram)\n"
         printf "  ${CYAN}[3]${NC} Reset config only (keep credentials & sessions)\n"
         printf "  ${CYAN}[4]${NC} Reset sessions only (keep credentials & config)\n"
-        printf "  ${CYAN}[5]${NC} Update only (fresh code, keep all data)\n"
-        printf "  ${CYAN}[6]${NC} Cancel / Run existing installation\n"
+        printf "  ${CYAN}[5]${NC} Reset Telegram only (keep everything else)\n"
+        printf "  ${CYAN}[6]${NC} Update only (fresh code, keep all data)\n"
+        printf "  ${CYAN}[7]${NC} Cancel / Run existing installation\n"
         printf "\n"
 
         # Read from /dev/tty if stdin is piped
         if [ -t 0 ]; then
-            read -p "  Select option [1-6]: " choice
+            read -p "  Select option [1-7]: " choice
         else
-            read -p "  Select option [1-6]: " choice < /dev/tty
+            read -p "  Select option [1-7]: " choice < /dev/tty
         fi
         case $choice in
             1)
@@ -154,7 +161,7 @@ if [ -d "$INSTALL_DIR" ]; then
                 rm -rf "$HOME/.claude/secure/public_key.pem" 2>/dev/null
                 ;;
             2)
-                printf "\n${YELLOW}Resetting credentials...${NC}\n"
+                printf "\n${YELLOW}Resetting API credentials...${NC}\n"
                 # Backup and remove .env
                 if [ -f "$INSTALL_DIR/.env" ]; then
                     mv "$INSTALL_DIR/.env" "$INSTALL_DIR/.env.backup"
@@ -164,8 +171,8 @@ if [ -d "$INSTALL_DIR" ]; then
                 rm -rf "$INSTALL_DIR"
                 mkdir -p "$INSTALL_DIR"
                 if [ -f "$TEMP_ENV" ]; then
-                    # Create clean .env without API keys
-                    grep -v "API_KEY" "$TEMP_ENV" > "$INSTALL_DIR/.env" 2>/dev/null || true
+                    # Create clean .env without API keys (keep Telegram)
+                    grep -v "OPENROUTER_API_KEY\|GLM_API_KEY" "$TEMP_ENV" > "$INSTALL_DIR/.env" 2>/dev/null || true
                     rm -f "$TEMP_ENV"
                 fi
                 ;;
@@ -192,6 +199,15 @@ if [ -d "$INSTALL_DIR" ]; then
                 # Continue with update
                 ;;
             5)
+                printf "\n${YELLOW}Resetting Telegram...${NC}\n"
+                if [ -f "$INSTALL_DIR/.env" ]; then
+                    # Remove Telegram lines from .env
+                    grep -v "TELEGRAM" "$INSTALL_DIR/.env" > "$INSTALL_DIR/.env.tmp" 2>/dev/null || true
+                    mv "$INSTALL_DIR/.env.tmp" "$INSTALL_DIR/.env"
+                    printf "  Telegram configuration removed\n"
+                fi
+                ;;
+            6)
                 printf "\n${YELLOW}Updating code only...${NC}\n"
                 # Backup everything
                 cp "$INSTALL_DIR/.env" "/tmp/aetherclaw-env-backup" 2>/dev/null
@@ -200,7 +216,7 @@ if [ -d "$INSTALL_DIR" ]; then
                 rm -rf "$INSTALL_DIR"
                 mkdir -p "$INSTALL_DIR"
                 ;;
-            6|*)
+            7|*)
                 printf "\n${CYAN}Running existing installation...${NC}\n"
                 export PATH="$HOME/.local/bin:$PATH"
                 cd "$INSTALL_DIR"
