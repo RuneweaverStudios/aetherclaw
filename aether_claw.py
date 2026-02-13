@@ -190,41 +190,127 @@ def cmd_onboard(args):
     import getpass
     from pathlib import Path
 
+    # ASCII Art Header
     print()
-    print("=" * 60)
-    print("   Aether-Claw Onboarding")
-    print("=" * 60)
+    print("  ╔════════════════════════════════════════════════════╗")
+    print("  ║              🥚 AETHERCLAW ONBOARDING 🥚             ║")
+    print("  ╚════════════════════════════════════════════════════╝")
     print()
-
-    # Step 1: Check API Keys
-    print("[1/5] Checking API Keys...")
-    print("-" * 40)
 
     env_file = Path(__file__).parent / '.env'
-    has_openrouter = bool(os.environ.get('OPENROUTER_API_KEY'))
-    has_glm = bool(os.environ.get('GLM_API_KEY'))
 
-    if has_openrouter:
-        print("  ✓ OPENROUTER_API_KEY found in environment")
-    elif has_glm:
-        print("  ✓ GLM_API_KEY found in environment")
-    else:
-        print("  ! No API key found in environment")
-        print()
-        key = getpass.getpass("  Enter your OpenRouter API key (or press Enter to skip): ").strip()
-        if key:
-            # Save to .env
-            with open(env_file, 'a') as f:
-                f.write(f"\nOPENROUTER_API_KEY={key}\n")
-            os.environ['OPENROUTER_API_KEY'] = key
-            print("  ✓ API key saved to .env")
+    # Step 1: API Key Setup
+    print("\n[1/6] 🔑 API Key Configuration")
+    print("-" * 50)
+
+    # Check for existing key
+    existing_key = os.environ.get('OPENROUTER_API_KEY', '')
+
+    # Also check .env file
+    if not existing_key and env_file.exists():
+        with open(env_file) as f:
+            for line in f:
+                if line.startswith('OPENROUTER_API_KEY='):
+                    existing_key = line.split('=', 1)[1].strip()
+                    if existing_key:
+                        os.environ['OPENROUTER_API_KEY'] = existing_key
+                    break
+
+    if existing_key:
+        masked = existing_key[:10] + '...' + existing_key[-4:] if len(existing_key) > 14 else '***'
+        print(f"  Found API key: {masked}")
+        change = input("  Use different key? [y/N]: ").strip().lower()
+        if change != 'y':
+            print("  ✓ Using existing API key")
         else:
-            print("  ⚠ Skipping API key setup. Set OPENROUTER_API_KEY manually.")
+            existing_key = ''
+            print()
+
+    if not existing_key:
+        print("  Get your API key at: https://openrouter.ai/keys")
+        print()
+        key = getpass.getpass("  Enter OpenRouter API key: ").strip()
+        if key:
+            # Update .env file
+            lines = []
+            if env_file.exists():
+                with open(env_file) as f:
+                    lines = f.readlines()
+
+            # Update or add the key
+            key_found = False
+            new_lines = []
+            for line in lines:
+                if line.startswith('OPENROUTER_API_KEY='):
+                    new_lines.append(f'OPENROUTER_API_KEY={key}\n')
+                    key_found = True
+                else:
+                    new_lines.append(line)
+
+            if not key_found:
+                new_lines.append(f'\nOPENROUTER_API_KEY={key}\n')
+
+            with open(env_file, 'w') as f:
+                f.writelines(new_lines)
+
+            os.environ['OPENROUTER_API_KEY'] = key
+            print("  ✓ API key saved")
+        else:
+            print("  ⚠ No API key provided - some features will be limited")
+
+    # Step 2: Model Selection
+    print("\n[2/6] 🧠 Model Selection")
+    print("-" * 50)
+    print("  Top OpenRouter Models:")
+    print()
+    print("  [1] Claude 3.5 Sonnet  - Best overall (recommended)")
+    print("  [2] Claude 3.5 Haiku   - Fast & cheap")
+    print("  [3] Gemini 2.5 Pro     - Google's best")
+    print("  [4] Gemini 2.0 Flash   - Fast & efficient")
+    print("  [5] GPT-4o             - OpenAI flagship")
+    print("  [6] DeepSeek V3        - Great value")
+    print("  [7] Custom model ID")
     print()
 
-    # Step 2: Generate RSA Keys
-    print("[2/5] Generating RSA Keys for Skill Signing...")
-    print("-" * 40)
+    choice = input("  Select reasoning model [1-7] (default: 1): ").strip() or '1'
+
+    models = {
+        '1': 'anthropic/claude-3.5-sonnet',
+        '2': 'anthropic/claude-3.5-haiku',
+        '3': 'google/gemini-2.5-pro-preview',
+        '4': 'google/gemini-2.0-flash-001',
+        '5': 'openai/gpt-4o',
+        '6': 'deepseek/deepseek-chat',
+    }
+
+    if choice == '7':
+        reasoning_model = input("  Enter model ID: ").strip()
+    else:
+        reasoning_model = models.get(choice, 'anthropic/claude-3.5-sonnet')
+
+    print(f"\n  ✓ Reasoning model: {reasoning_model}")
+
+    # Action model
+    print("\n  Action model (for fast tasks):")
+    action_choice = input("  Select [1-6] (default: 2 - Haiku): ").strip() or '2'
+    action_model = models.get(action_choice, 'anthropic/claude-3.5-haiku')
+    print(f"  ✓ Action model: {action_model}")
+
+    # Save to config
+    config_file = Path(__file__).parent / 'swarm_config.json'
+    if config_file.exists():
+        import json
+        with open(config_file) as f:
+            config = json.load(f)
+        config['models']['tier_1_model'] = reasoning_model
+        config['models']['tier_2_model'] = action_model
+        with open(config_file, 'w') as f:
+            json.dump(config, f, indent=2)
+        print("  ✓ Model configuration saved")
+
+    # Step 3: RSA Keys
+    print("\n[3/6] 🔐 Cryptographic Keys")
+    print("-" * 50)
 
     from keygen import KeyManager
     manager = KeyManager()
@@ -232,36 +318,75 @@ def cmd_onboard(args):
     if manager.key_exists():
         print("  ✓ RSA keys already exist")
         info = manager.get_key_info()
-        print(f"    Location: {info.get('private_key_path', 'N/A')}")
+        print(f"    Key location: {info.get('private_key_path', 'N/A')}")
     else:
         try:
             private, public = manager.generate_key_pair(overwrite=False)
-            print(f"  ✓ Generated new RSA key pair")
+            print("  ✓ Generated RSA-2048 key pair")
             print(f"    Private: {private}")
             print(f"    Public: {public}")
         except Exception as e:
-            print(f"  ✗ Error generating keys: {e}")
-    print()
+            print(f"  ✗ Error: {e}")
 
-    # Step 3: Index Brain Files
-    print("[3/5] Indexing Brain Files...")
-    print("-" * 40)
+    # Step 4: Gateway Daemon
+    print("\n[4/6] 🚪 Gateway Daemon")
+    print("-" * 50)
+
+    start_daemon = input("  Start heartbeat daemon automatically? [Y/n]: ").strip().lower()
+    start_daemon = start_daemon != 'n'
+
+    if start_daemon:
+        # Create launch agent for macOS
+        launch_dir = Path.home() / 'Library' / 'LaunchAgents'
+        launch_dir.mkdir(parents=True, exist_ok=True)
+
+        plist_content = f'''<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+    <key>Label</key>
+    <string>com.aetherclaw.heartbeat</string>
+    <key>ProgramArguments</key>
+    <array>
+        <string>{sys.executable}</string>
+        <string>{Path(__file__).parent / 'aether_claw.py'}</string>
+        <string>heartbeat</string>
+    </array>
+    <key>RunAtLoad</key>
+    <true/>
+    <key>KeepAlive</key>
+    <true/>
+    <key>StandardOutPath</key>
+    <string>/tmp/aetherclaw.log</string>
+    <key>StandardErrorPath</key>
+    <string>/tmp/aetherclaw.log</string>
+</dict>
+</plist>'''
+
+        plist_path = launch_dir / 'com.aetherclaw.heartbeat.plist'
+        with open(plist_path, 'w') as f:
+            f.write(plist_content)
+        print(f"  ✓ Gateway daemon configured")
+        print(f"    LaunchAgent: {plist_path}")
+    else:
+        print("  ℹ Gateway daemon not configured")
+
+    # Step 5: Index Brain
+    print("\n[5/6] 🧠 Memory Indexing")
+    print("-" * 50)
 
     from brain_index import BrainIndexer
     indexer = BrainIndexer()
 
     try:
         results = indexer.index_all()
-        print(f"  ✓ Indexed {len(results)} files:")
-        for name, version in results.items():
-            print(f"    - {name} (v{version})")
+        print(f"  ✓ Indexed {len(results)} brain files")
     except Exception as e:
-        print(f"  ✗ Error indexing: {e}")
-    print()
+        print(f"  ✗ Error: {e}")
 
-    # Step 4: Verify Skills
-    print("[4/5] Verifying Skills...")
-    print("-" * 40)
+    # Step 6: Skills Check
+    print("\n[6/6] 🔧 Skills Verification")
+    print("-" * 50)
 
     from safe_skill_creator import SafeSkillCreator
     creator = SafeSkillCreator()
@@ -269,52 +394,48 @@ def cmd_onboard(args):
     try:
         skills = creator.list_skills()
         if skills:
-            print(f"  ✓ Found {len(skills)} skill(s):")
-            for skill in skills:
-                status = "✓ valid" if skill.get('signature_valid') else "✗ invalid"
-                print(f"    - {skill['name']}: {status}")
+            valid = sum(1 for s in skills if s.get('signature_valid'))
+            print(f"  ✓ {valid}/{len(skills)} skills verified")
         else:
-            print("  ℹ No skills found yet")
-            print("    Create skills with: aetherclaw sign-skill --create <file>")
+            print("  ℹ No skills yet - create with: aetherclaw sign-skill")
     except Exception as e:
-        print(f"  ✗ Error verifying skills: {e}")
-    print()
-
-    # Step 5: System Health Check
-    print("[5/5] Running Health Check...")
-    print("-" * 40)
-
-    try:
-        from tasks.health_monitor import check_system_health
-        health = check_system_health()
-        print(f"  ✓ CPU: {health.cpu_percent}%")
-        print(f"  ✓ Memory: {health.memory_percent}%")
-        print(f"  ✓ Disk: {health.disk_percent}%")
-
-        if health.cpu_percent > 80:
-            print("  ⚠ High CPU usage detected")
-        if health.memory_percent > 90:
-            print("  ⚠ High memory usage detected")
-    except ImportError:
-        print("  ℹ Health monitor not available")
-    except Exception as e:
-        print(f"  ⚠ Health check error: {e}")
-    print()
+        print(f"  ⚠ {e}")
 
     # Final Summary
-    print("=" * 60)
-    print("   Onboarding Complete!")
-    print("=" * 60)
     print()
-    print("Quick Start Commands:")
+    print("  ╔════════════════════════════════════════════════════╗")
+    print("  ║           🐣 ONBOARDING COMPLETE! 🐣                 ║")
+    print("  ╚════════════════════════════════════════════════════╝")
     print()
-    print("  aetherclaw status          # View system status")
-    print("  aetherclaw heartbeat       # Start scheduled tasks")
-    print("  aetherclaw dashboard       # Launch web UI")
-    print("  aetherclaw swarm -t 'task' # Run a swarm task")
+
+    # Ask to hatch
+    print("  Ready to hatch into AetherClaw!")
     print()
-    print("Documentation: brain/soul.md")
+    print("  [1] Hatch into TUI (Terminal Interface)")
+    print("  [2] Launch Dashboard (Web UI)")
+    print("  [3] Exit to shell")
     print()
+
+    hatch = input("  Choose [1-3] (default: 1): ").strip() or '1'
+
+    if hatch == '1':
+        print("\n  🐣 Hatching into TUI...")
+        import subprocess
+        tui_path = Path(__file__).parent / 'tui.py'
+        os.execv(sys.executable, [sys.executable, str(tui_path)])
+    elif hatch == '2':
+        print("\n  🐣 Launching Dashboard...")
+        import subprocess
+        subprocess.run([sys.executable, '-m', 'streamlit', 'run',
+                       str(Path(__file__).parent / 'dashboard.py'),
+                       '--server.headless', 'true'])
+    else:
+        print("\n  Run these commands to get started:")
+        print()
+        print("    aetherclaw tui         # Terminal interface")
+        print("    aetherclaw dashboard   # Web dashboard")
+        print("    aetherclaw status      # System status")
+        print()
 
 
 def cmd_status(args):

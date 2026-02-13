@@ -185,17 +185,15 @@ printf "\n${GREEN}━━━━━━━━━━━━━━━━━━━━�
 printf "${GREEN}✓ Aether-Claw installed!${NC}\n"
 printf "${GREEN}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 printf "\n${BLUE}Location:${NC} $INSTALL_DIR\n"
+
+# Add to current session PATH immediately
+export PATH="$BIN_DIR:$PATH"
+
 printf "\n${YELLOW}Next:${NC}\n"
-printf "  ${CYAN}export OPENROUTER_API_KEY=your-key${NC}\n"
 printf "  ${CYAN}aetherclaw onboard${NC}\n"
 printf "\n"
 
-# Auto-reload shell if needed
-if [ "$NEED_RELOAD" = true ]; then
-    printf "${DIM}Reloading shell...${NC}\n"
-    if [ -n "$ZSH_VERSION" ]; then
-        exec zsh -l
-    elif [ -n "$BASH_VERSION" ]; then
-        exec bash -l
-    fi
-fi
+# Run onboard directly
+printf "${DIM}Starting onboarding...${NC}\n\n"
+cd "$INSTALL_DIR"
+python3 aether_claw.py onboard
