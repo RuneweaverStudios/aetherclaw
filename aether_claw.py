@@ -184,6 +184,139 @@ def cmd_dashboard(args):
     subprocess.run(cmd)
 
 
+def cmd_onboard(args):
+    """Interactive onboarding setup."""
+    import os
+    import getpass
+    from pathlib import Path
+
+    print()
+    print("=" * 60)
+    print("   Aether-Claw Onboarding")
+    print("=" * 60)
+    print()
+
+    # Step 1: Check API Keys
+    print("[1/5] Checking API Keys...")
+    print("-" * 40)
+
+    env_file = Path(__file__).parent / '.env'
+    has_openrouter = bool(os.environ.get('OPENROUTER_API_KEY'))
+    has_glm = bool(os.environ.get('GLM_API_KEY'))
+
+    if has_openrouter:
+        print("  ✓ OPENROUTER_API_KEY found in environment")
+    elif has_glm:
+        print("  ✓ GLM_API_KEY found in environment")
+    else:
+        print("  ! No API key found in environment")
+        print()
+        key = getpass.getpass("  Enter your OpenRouter API key (or press Enter to skip): ").strip()
+        if key:
+            # Save to .env
+            with open(env_file, 'a') as f:
+                f.write(f"\nOPENROUTER_API_KEY={key}\n")
+            os.environ['OPENROUTER_API_KEY'] = key
+            print("  ✓ API key saved to .env")
+        else:
+            print("  ⚠ Skipping API key setup. Set OPENROUTER_API_KEY manually.")
+    print()
+
+    # Step 2: Generate RSA Keys
+    print("[2/5] Generating RSA Keys for Skill Signing...")
+    print("-" * 40)
+
+    from keygen import KeyManager
+    manager = KeyManager()
+
+    if manager.key_exists():
+        print("  ✓ RSA keys already exist")
+        info = manager.get_key_info()
+        print(f"    Location: {info.get('private_key_path', 'N/A')}")
+    else:
+        try:
+            private, public = manager.generate_key_pair(overwrite=False)
+            print(f"  ✓ Generated new RSA key pair")
+            print(f"    Private: {private}")
+            print(f"    Public: {public}")
+        except Exception as e:
+            print(f"  ✗ Error generating keys: {e}")
+    print()
+
+    # Step 3: Index Brain Files
+    print("[3/5] Indexing Brain Files...")
+    print("-" * 40)
+
+    from brain_index import BrainIndexer
+    indexer = BrainIndexer()
+
+    try:
+        results = indexer.index_all()
+        print(f"  ✓ Indexed {len(results)} files:")
+        for name, version in results.items():
+            print(f"    - {name} (v{version})")
+    except Exception as e:
+        print(f"  ✗ Error indexing: {e}")
+    print()
+
+    # Step 4: Verify Skills
+    print("[4/5] Verifying Skills...")
+    print("-" * 40)
+
+    from safe_skill_creator import SafeSkillCreator
+    creator = SafeSkillCreator()
+
+    try:
+        skills = creator.list_skills()
+        if skills:
+            print(f"  ✓ Found {len(skills)} skill(s):")
+            for skill in skills:
+                status = "✓ valid" if skill.get('signature_valid') else "✗ invalid"
+                print(f"    - {skill['name']}: {status}")
+        else:
+            print("  ℹ No skills found yet")
+            print("    Create skills with: aetherclaw sign-skill --create <file>")
+    except Exception as e:
+        print(f"  ✗ Error verifying skills: {e}")
+    print()
+
+    # Step 5: System Health Check
+    print("[5/5] Running Health Check...")
+    print("-" * 40)
+
+    try:
+        from tasks.health_monitor import check_system_health
+        health = check_system_health()
+        print(f"  ✓ CPU: {health.cpu_percent}%")
+        print(f"  ✓ Memory: {health.memory_percent}%")
+        print(f"  ✓ Disk: {health.disk_percent}%")
+
+        if health.cpu_percent > 80:
+            print("  ⚠ High CPU usage detected")
+        if health.memory_percent > 90:
+            print("  ⚠ High memory usage detected")
+    except ImportError:
+        print("  ℹ Health monitor not available")
+    except Exception as e:
+        print(f"  ⚠ Health check error: {e}")
+    print()
+
+    # Final Summary
+    print("=" * 60)
+    print("   Onboarding Complete!")
+    print("=" * 60)
+    print()
+    print("Quick Start Commands:")
+    print()
+    print("  aetherclaw status          # View system status")
+    print("  aetherclaw heartbeat       # Start scheduled tasks")
+    print("  aetherclaw dashboard       # Launch web UI")
+    print("  aetherclaw swarm -t 'task' # Run a swarm task")
+    print()
+    print("Documentation: brain/soul.md")
+    print()
+
+
 def cmd_status(args):
     """Show system status."""
     from config_loader import load_config
@@ -318,6 +451,112 @@ def cmd_swarm(args):
                 print(f"  Error: {completed.error}")
 
 
+def cmd_tui(args):
+    """Launch terminal TUI."""
+    import subprocess
+    tui_path = Path(__file__).parent / 'tui.py'
+    subprocess.run([sys.executable, str(tui_path)])
+
+
+def cmd_telegram(args):
+    """Start Telegram bot."""
+    import os
+
+    token = args.token or os.environ.get('TELEGRAM_BOT_TOKEN')
+    chat_id = args.chat_id or os.environ.get('TELEGRAM_CHAT_ID')
+
+    if not token:
+        print("Error: Telegram bot token required.")
+        print("Set TELEGRAM_BOT_TOKEN environment variable or use --token")
+        sys.exit(1)
+
+    print("Starting Telegram bot...")
+    print(f"Token: {token[:20]}...")
+    if chat_id:
+        print(f"Chat ID: {chat_id}")
+
+    try:
+        import urllib.request
+        import json
+        import time
+
+        # Get bot info
+        url = f"https://api.telegram.org/bot{token}/getMe"
+        with urllib.request.urlopen(url, timeout=10) as resp:
+            result = json.loads(resp.read())
+            if result.get('ok'):
+                bot = result['result']
+                print(f"Bot: @{bot.get('username', 'unknown')}")
+            else:
+                print(f"Error: {result}")
+                sys.exit(1)
+
+        print("\nBot is running. Send messages to interact with Aether-Claw.")
+        print("Press Ctrl+C to stop.\n")
+
+        # Simple polling loop
+        offset = 0
+        while True:
+            try:
+                # Get updates
+                url = f"https://api.telegram.org/bot{token}/getUpdates"
+                if offset:
+                    url += f"?offset={offset}"
+
+                with urllib.request.urlopen(url, timeout=30) as resp:
+                    result = json.loads(resp.read())
+
+                if result.get('ok'):
+                    updates = result.get('result', [])
+                    for update in updates:
+                        offset = update['update_id'] + 1
+
+                        if 'message' in update:
+                            msg = update['message']
+                            chat = msg['chat']
+                            text = msg.get('text', '')
+
+                            if text:
+                                print(f"[{chat.get('id')}] {msg.get('from', {}).get('first_name', 'User')}: {text}")
+
+                                # Get AI response
+                                from glm_client import GLMClient, ModelTier
+                                client = GLMClient()
+
+                                response = client.call(
+                                    prompt=text,
+                                    tier=ModelTier.TIER_1_REASONING,
+                                    system_prompt="You are Aether-Claw, a secure AI assistant. Be helpful and concise."
+                                )
+
+                                if response.success:
+                                    reply = response.content[:4000]  # Telegram limit
+                                else:
+                                    reply = f"Error: {response.error}"
+
+                                # Send response
+                                send_url = f"https://api.telegram.org/bot{token}/sendMessage"
+                                data = json.dumps({
+                                    "chat_id": chat['id'],
+                                    "text": reply,
+                                    "parse_mode": "Markdown"
+                                }).encode()
+                                req = urllib.request.Request(send_url, data=data, headers={"Content-Type": "application/json"})
+                                urllib.request.urlopen(req, timeout=10)
+
+                time.sleep(1)
+
+            except urllib.error.URLError:
+                time.sleep(5)
+            except KeyboardInterrupt:
+                print("\nStopping bot...")
+                break
+
+    except Exception as e:
+        print(f"Error: {e}")
+        sys.exit(1)
+
+
 def main():
     """Main CLI entry point."""
     parser = argparse.ArgumentParser(
@@ -331,6 +570,10 @@ def main():
     p_index = subparsers.add_parser('index', help='Index brain files')
     p_index.add_argument('--file', '-f', help='Index a specific file')
     p_index.set_defaults(func=cmd_index)
+
+    # onboard command
+    p_onboard = subparsers.add_parser('onboard', help='Interactive setup wizard')
+    p_onboard.set_defaults(func=cmd_onboard)
 
     # keygen command
     p_keygen = subparsers.add_parser('keygen', help='Generate RSA keys')
@@ -384,6 +627,16 @@ def main():
     p_swarm.add_argument('--status', action='store_true', help='Show swarm status')
     p_swarm.add_argument('--task', '-t', help='Execute a task')
     p_swarm.set_defaults(func=cmd_swarm)
+
+    # tui command
+    p_tui = subparsers.add_parser('tui', help='Launch terminal interface')
+    p_tui.set_defaults(func=cmd_tui)
+
+    # telegram command
+    p_telegram = subparsers.add_parser('telegram', help='Start Telegram bot')
+    p_telegram.add_argument('--token', '-t', help='Bot token (or set TELEGRAM_BOT_TOKEN)')
+    p_telegram.add_argument('--chat-id', '-c', help='Chat ID for notifications')
+    p_telegram.set_defaults(func=cmd_telegram)
 
     args = parser.parse_args()
 

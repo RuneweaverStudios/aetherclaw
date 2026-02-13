@@ -2,12 +2,21 @@
 """
 Aether-Claw Dashboard
 
-Streamlit-based dashboard for monitoring and controlling Aether-Claw.
+Streamlit-based web interface with chat, monitoring, and Telegram integration.
 """
 
+import os
 import sys
 from pathlib import Path
 from datetime import datetime
+import json
+
+# Load environment
+try:
+    from dotenv import load_dotenv
+    load_dotenv(Path(__file__).parent / '.env')
+except ImportError:
+    pass
 
 # Add parent to path for imports
 sys.path.insert(0, str(Path(__file__).parent))
@@ -16,450 +25,483 @@ import streamlit as st
 
 # Page config
 st.set_page_config(
-    page_title="Aether-Claw Dashboard",
-    page_icon="🦁",
+    page_title="Aether-Claw",
+    page_icon="🦅",
     layout="wide",
     initial_sidebar_state="expanded"
 )
 
+# Custom CSS
+st.markdown("""
+<style>
+    .stChatMessage { padding: 10px; border-radius: 8px; margin: 5px 0; }
+    .block-container { padding-top: 2rem; }
+    .stMetric > div { background-color: #1a1a2e; border-radius: 8px; padding: 10px; }
+</style>
+""", unsafe_allow_html=True)
 
-def load_config():
-    """Load configuration."""
+
+def get_api_client():
+    """Get GLM client."""
+    from glm_client import GLMClient, ModelTier
+    return GLMClient(), ModelTier
+
+
+def get_system_status() -> dict:
+    """Get system status."""
     try:
         from config_loader import load_config
-        return load_config()
-    except Exception:
-        return None
-
-
-def get_audit_log():
-    """Get audit log entries."""
-    audit_file = Path(__file__).parent / 'brain' / 'audit_log.md'
-
-    if not audit_file.exists():
-        return []
-
-    entries = []
-    current_entry = []
-
-    with open(audit_file, 'r') as f:
-        for line in f:
-            if line.startswith('### '):
-                if current_entry:
-                    entries.append(''.join(current_entry))
-                current_entry = [line]
-            elif current_entry:
-                current_entry.append(line)
-
-    return entries[-50:]  # Last 50 entries
-
-
-def get_skills_status():
-    """Get skills status."""
-    try:
+        from brain_index import BrainIndexer
         from safe_skill_creator import SafeSkillCreator
+        from kill_switch import get_kill_switch
+
+        config = load_config()
+        indexer = BrainIndexer()
+        stats = indexer.get_stats()
         creator = SafeSkillCreator()
-        return creator.list_skills()
+        skills = creator.list_skills()
+        ks = get_kill_switch()
+
+        return {
+            "version": config.version,
+            "indexed_files": stats['total_files'],
+            "total_versions": stats['total_versions'],
+            "skills": len(skills),
+            "valid_skills": sum(1 for s in skills if s.get('signature_valid')),
+            "heartbeat_enabled": config.heartbeat.enabled,
+            "heartbeat_interval": config.heartbeat.interval_minutes,
+            "safety_gate": config.safety_gate.enabled,
+            "kill_switch_armed": ks.is_armed(),
+            "kill_switch_triggered": ks.is_triggered(),
+        }
     except Exception as e:
-        return []
+        return {"error": str(e)}
 
 
-def get_brain_files():
-    """Get brain files."""
-    brain_dir = Path(__file__).parent / 'brain'
-
-    if not brain_dir.exists():
-        return []
-
-    files = []
-    for f in brain_dir.glob('*.md'):
-        with open(f, 'r') as file:
-            content = file.read()
-        files.append({
-            'name': f.name,
-            'path': str(f),
-            'content': content,
-            'size': len(content)
-        })
-
-    return files
+def init_session_state():
+    """Initialize session state."""
+    if "chat_history" not in st.session_state:
+        st.session_state.chat_history = []
+    if "telegram_enabled" not in st.session_state:
+        st.session_state.telegram_enabled = bool(os.environ.get("TELEGRAM_BOT_TOKEN"))
+    if "telegram_token" not in st.session_state:
+        st.session_state.telegram_token = os.environ.get("TELEGRAM_BOT_TOKEN", "")
+    if "telegram_chat_id" not in st.session_state:
+        st.session_state.telegram_chat_id = os.environ.get("TELEGRAM_CHAT_ID", "")
 
 
-def get_heartbeat_status():
-    """Get heartbeat status."""
+def send_telegram_message(text: str) -> tuple[bool, str]:
+    """Send message via Telegram bot."""
+    token = st.session_state.get("telegram_token", "")
+    chat_id = st.session_state.get("telegram_chat_id", "")
+
+    if not token or not chat_id:
+        return False, "Telegram not configured"
+
     try:
-        from heartbeat_daemon import HeartbeatDaemon
-        daemon = HeartbeatDaemon()
-        return daemon.get_status()
-    except Exception:
-        return {'running': False}
+        import urllib.request
+        url = f"https://api.telegram.org/bot{token}/sendMessage"
+        data = json.dumps({
+            "chat_id": chat_id,
+            "text": text[:4096],  # Telegram limit
+            "parse_mode": "Markdown"
+        }).encode()
+        req = urllib.request.Request(url, data=data, headers={"Content-Type": "application/json"})
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            result = json.loads(resp.read())
+            if result.get("ok"):
+                return True, "Sent"
+            return False, result.get("description", "Unknown error")
+    except Exception as e:
+        return False, str(e)
 
 
-def main():
-    """Main dashboard application."""
+def get_chat_response(message: str) -> str:
+    """Get AI response for chat message."""
+    try:
+        client, ModelTier = get_api_client()
 
-    # Sidebar
-    st.sidebar.title("🦁 Aether-Claw")
-    st.sidebar.markdown("---")
+        # Build context from history
+        messages = []
+        for msg in st.session_state.chat_history[-10:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
 
-    page = st.sidebar.radio(
-        "Navigation",
-        ["Overview", "Live Logs", "Brain Editor", "Heartbeat", "Skills", "Swarm"]
-    )
+        system_prompt = """You are Aether-Claw, a secure, swarm-based AI assistant.
 
-    # Load config
-    config = load_config()
+Capabilities:
+- Persistent memory (searchable brain files indexed in SQLite)
+- Cryptographically signed skills with RSA-2048
+- Proactive heartbeat tasks (git scanning, memory indexing, health checks)
+- Swarm orchestration for parallel task execution
+- Kill switch for immediate halt on security events
+- Safety gate requiring confirmation for sensitive actions
 
-    # Header
-    st.title(f"Aether-Claw Dashboard")
-    st.markdown(f"*Secure Swarm-Based AI Assistant*")
+Be helpful, security-conscious, and concise. When asked to perform tasks,
+explain what you would do and ask for confirmation before taking action."""
 
-    if config:
-        st.caption(f"Version {config.version} | Brain: {config.brain_dir}")
-
-    st.markdown("---")
-
-    # Pages
-    if page == "Overview":
-        render_overview(config)
-    elif page == "Live Logs":
-        render_live_logs()
-    elif page == "Brain Editor":
-        render_brain_editor()
-    elif page == "Heartbeat":
-        render_heartbeat()
-    elif page == "Skills":
-        render_skills()
-    elif page == "Swarm":
-        render_swarm()
-
-
-def render_overview(config):
-    """Render overview page."""
-    st.header("System Overview")
-
-    col1, col2, col3 = st.columns(3)
-
-    # System status
-    with col1:
-        st.subheader("System Status")
-        st.metric("Safety Gate", "Enabled" if config and config.safety_gate.enabled else "Disabled")
-        st.metric("Kill Switch", "Armed" if config and config.kill_switch.enabled else "Disarmed")
-        st.metric("Heartbeat", "Running" if get_heartbeat_status().get('running') else "Stopped")
-
-    # Memory status
-    with col2:
-        st.subheader("Memory")
-        brain_files = get_brain_files()
-        st.metric("Brain Files", len(brain_files))
-
-        try:
-            from brain_index import BrainIndexer
-            indexer = BrainIndexer()
-            stats = indexer.get_stats()
-            st.metric("Indexed Files", stats.get('total_files', 0))
-            st.metric("Total Versions", stats.get('total_versions', 0))
-        except Exception:
-            st.metric("Index", "Not available")
-
-    # Skills status
-    with col3:
-        st.subheader("Skills")
-        skills = get_skills_status()
-        valid = sum(1 for s in skills if s.get('signature_valid'))
-        st.metric("Total Skills", len(skills))
-        st.metric("Valid Signatures", valid)
-
-        if len(skills) > valid:
-            st.warning(f"⚠️ {len(skills) - valid} skills have invalid signatures!")
-
-    # Recent activity
-    st.subheader("Recent Activity")
-    logs = get_audit_log()[:10]
-
-    if logs:
-        for log in logs:
-            with st.expander(log.split('\n')[0][:80], expanded=False):
-                st.code(log, language='markdown')
-    else:
-        st.info("No recent activity")
-
-
-def render_live_logs():
-    """Render live logs page."""
-    st.header("Live Logs")
-
-    # Refresh button
-    col1, col2 = st.columns([3, 1])
-    with col2:
-        auto_refresh = st.checkbox("Auto-refresh", value=True)
-        if st.button("Refresh") or auto_refresh:
-            st.rerun()
-
-    # Log level filter
-    level_filter = st.multiselect(
-        "Filter by level",
-        ["INFO", "WARN", "ERROR", "SECURITY", "AUDIT"],
-        default=["INFO", "WARN", "ERROR", "SECURITY"]
-    )
-
-    # Get logs
-    logs = get_audit_log()
-
-    # Filter
-    filtered = []
-    for log in logs:
-        for level in level_filter:
-            if f"| {level} |" in log:
-                filtered.append(log)
-                break
-
-    st.write(f"Showing {len(filtered)} entries")
-
-    # Display
-    for log in filtered[-30:]:
-        lines = log.strip().split('\n')
-        header = lines[0] if lines else log[:100]
-
-        # Determine color based on level
-        if "| ERROR |" in header or "| SECURITY |" in header:
-            st.error(header)
-        elif "| WARN |" in header:
-            st.warning(header)
-        else:
-            st.info(header)
-
-        with st.expander("Details"):
-            st.code(log, language='markdown')
-
-
-def render_brain_editor():
-    """Render brain editor page."""
-    st.header("Brain Editor")
-
-    brain_files = get_brain_files()
-
-    if not brain_files:
-        st.warning("No brain files found")
-        return
-
-    # File selector
-    file_names = [f['name'] for f in brain_files]
-    selected = st.selectbox("Select file", file_names)
-
-    # Find selected file
-    selected_file = next((f for f in brain_files if f['name'] == selected), None)
-
-    if selected_file:
-        col1, col2 = st.columns([3, 1])
-        with col2:
-            st.metric("Size", f"{selected_file['size']} chars")
-
-        # Editor
-        new_content = st.text_area(
-            "Edit content",
-            selected_file['content'],
-            height=400
+        response = client.call(
+            prompt=message,
+            tier=ModelTier.TIER_1_REASONING,
+            system_prompt=system_prompt
         )
 
-        col1, col2 = st.columns(2)
-        with col1:
-            if st.button("Save Changes"):
+        if response.success:
+            return response.content
+        return f"Error: {response.error}"
+
+    except Exception as e:
+        return f"Error connecting to AI: {e}"
+
+
+def render_sidebar():
+    """Render sidebar with status and controls."""
+    with st.sidebar:
+        st.title("🦅 Aether-Claw")
+        st.caption("Secure Swarm-Based AI Assistant")
+        st.divider()
+
+        # Status
+        st.subheader("📊 Status")
+        status = get_system_status()
+
+        if "error" in status:
+            st.error(f"Error: {status['error']}")
+        else:
+            col1, col2 = st.columns(2)
+            with col1:
+                st.metric("Memory", status['indexed_files'])
+                st.metric("Skills", f"{status['valid_skills']}/{status['skills']}")
+            with col2:
+                st.metric("Versions", status['total_versions'])
+                st.metric("Heartbeat", f"{status['heartbeat_interval']}m")
+
+            # Safety status
+            st.divider()
+            st.subheader("🔒 Security")
+
+            safety = "🟢" if status['safety_gate'] else "🔴"
+            st.markdown(f"Safety Gate: **{safety} {'ON' if status['safety_gate'] else 'OFF'}**")
+
+            if status['kill_switch_triggered']:
+                ks = "🔴 TRIGGERED"
+            elif status['kill_switch_armed']:
+                ks = "🟡 ARMED"
+            else:
+                ks = "🟢 READY"
+            st.markdown(f"Kill Switch: **{ks}**")
+
+        st.divider()
+
+        # Quick Actions
+        st.subheader("⚡ Actions")
+
+        if st.button("▶ Run Heartbeat", use_container_width=True):
+            with st.spinner("Running tasks..."):
                 try:
-                    with open(selected_file['path'], 'w') as f:
-                        f.write(new_content)
-                    st.success(f"Saved {selected}")
-
-                    # Re-index
-                    try:
-                        from brain_index import BrainIndexer
-                        indexer = BrainIndexer()
-                        indexer.index_file(Path(selected_file['path']))
-                        st.info("Re-indexed")
-                    except Exception as e:
-                        st.warning(f"Could not re-index: {e}")
-
+                    from heartbeat_daemon import HeartbeatDaemon
+                    daemon = HeartbeatDaemon()
+                    results = daemon.run_once()
+                    st.success(f"Completed {len(results)} tasks")
+                    for r in results:
+                        icon = "✅" if r.success else "❌"
+                        st.text(f"{icon} {r.task_name}")
                 except Exception as e:
-                    st.error(f"Error saving: {e}")
+                    st.error(f"Error: {e}")
 
-        with col2:
-            if st.button("View History"):
+        if st.button("📁 Index Brain", use_container_width=True):
+            with st.spinner("Indexing..."):
                 try:
                     from brain_index import BrainIndexer
                     indexer = BrainIndexer()
-                    history = indexer.get_file_history(selected)
-
-                    if history:
-                        st.write(f"**{len(history)} versions**")
-                        for h in history[-5:]:
-                            st.write(f"- v{h['version']}: {h['timestamp']}")
-                    else:
-                        st.info("No history available")
+                    results = indexer.index_all()
+                    st.success(f"Indexed {len(results)} files")
                 except Exception as e:
-                    st.error(f"Error getting history: {e}")
+                    st.error(f"Error: {e}")
+
+        st.divider()
+
+        # Telegram Settings
+        st.subheader("📱 Telegram")
+
+        telegram_enabled = st.checkbox("Enable Telegram", value=st.session_state.telegram_enabled)
+        st.session_state.telegram_enabled = telegram_enabled
+
+        if telegram_enabled:
+            token = st.text_input("Bot Token", value=st.session_state.telegram_token, type="password")
+            chat_id = st.text_input("Chat ID", value=st.session_state.telegram_chat_id)
+
+            st.session_state.telegram_token = token
+            st.session_state.telegram_chat_id = chat_id
+
+            if st.button("Test Connection", use_container_width=True):
+                if token and chat_id:
+                    success, msg = send_telegram_message("🦅 *Aether-Claw connected!*")
+                    if success:
+                        st.success("Telegram connected!")
+                    else:
+                        st.error(f"Failed: {msg}")
+                else:
+                    st.warning("Enter token and chat ID")
 
 
-def render_heartbeat():
-    """Render heartbeat page."""
-    st.header("Heartbeat Status")
+def render_chat():
+    """Render chat interface."""
+    st.header("💬 Chat with Aether-Claw")
+    st.caption("Ask questions, run tasks, or explore your memory")
 
-    status = get_heartbeat_status()
+    # Display chat history
+    chat_container = st.container()
 
-    col1, col2, col3 = st.columns(3)
+    with chat_container:
+        for message in st.session_state.chat_history:
+            with st.chat_message(message["role"]):
+                st.markdown(message["content"])
+
+    # Chat input
+    if prompt := st.chat_input("Message Aether-Claw..."):
+        # Add user message
+        st.session_state.chat_history.append({"role": "user", "content": prompt})
+
+        with st.chat_message("user"):
+            st.markdown(prompt)
+
+        # Get AI response
+        with st.chat_message("assistant"):
+            with st.spinner("Thinking..."):
+                response = get_chat_response(prompt)
+                st.markdown(response)
+
+                # Send to Telegram if enabled
+                if st.session_state.telegram_enabled:
+                    send_telegram_message(f"👤 *You:* {prompt}\n\n🦅 *Aether-Claw:*\n{response[:2000]}")
+
+        st.session_state.chat_history.append({"role": "assistant", "content": response})
+        st.rerun()
+
+
+def render_memory():
+    """Render memory search interface."""
+    st.header("🧠 Memory Search")
+    st.caption("Search through indexed brain files")
+
+    col1, col2 = st.columns([3, 1])
 
     with col1:
-        running = status.get('running', False)
-        st.metric("Status", "Running" if running else "Stopped")
+        search_query = st.text_input("Search", placeholder="Enter search query...", label_visibility="collapsed")
 
-    with col2:
-        st.metric("Interval", f"{status.get('interval_minutes', 30)} min")
-
-    with col3:
-        st.metric("Tasks Registered", len(status.get('registered_tasks', [])))
-
-    # Last run
-    if status.get('last_run'):
-        st.info(f"Last run: {status['last_run']}")
-
-    # Registered tasks
-    st.subheader("Registered Tasks")
-    tasks = status.get('registered_tasks', [])
-
-    if tasks:
-        for task in tasks:
-            st.write(f"- {task}")
-    else:
-        st.info("No tasks registered")
-
-    # Controls
-    st.subheader("Controls")
-
-    col1, col2 = st.columns(2)
-
-    with col1:
-        if st.button("Run Heartbeat Once"):
-            try:
-                from heartbeat_daemon import HeartbeatDaemon
-                daemon = HeartbeatDaemon()
-                results = daemon.run_once()
-
-                st.success(f"Completed {len(results)} tasks")
-
-                for result in results:
-                    status_icon = "✅" if result.success else "❌"
-                    st.write(f"{status_icon} {result.task_name}: {result.message}")
-
-            except Exception as e:
-                st.error(f"Error: {e}")
-
-    with col2:
-        if st.button("Re-index Memory"):
+        if search_query:
             try:
                 from brain_index import BrainIndexer
                 indexer = BrainIndexer()
-                results = indexer.index_all()
+                results = indexer.search_memory(search_query, limit=10)
 
-                st.success(f"Indexed {len(results)} files")
-                for name, version in results.items():
-                    st.write(f"- {name}: v{version}")
-
+                if results:
+                    st.success(f"Found {len(results)} results")
+                    for r in results:
+                        with st.expander(f"📄 {r['file_name']}"):
+                            content = r.get('content', '')
+                            st.text(content[:1500] + "..." if len(content) > 1500 else content)
+                else:
+                    st.info("No results found")
             except Exception as e:
                 st.error(f"Error: {e}")
 
+    with col2:
+        st.subheader("Quick Access")
+        brain_files = ["soul.md", "user.md", "memory.md", "heartbeat.md", "audit_log.md"]
+
+        for f in brain_files:
+            if st.button(f, key=f"brain_{f}", use_container_width=True):
+                st.session_state.selected_brain_file = f
+
+        st.divider()
+
+        if "selected_brain_file" in st.session_state:
+            file_path = Path(__file__).parent / "brain" / st.session_state.selected_brain_file
+            if file_path.exists():
+                with open(file_path) as f:
+                    st.code(f.read()[:2000], language="markdown")
+
 
 def render_skills():
-    """Render skills page."""
-    st.header("Skill Verification")
+    """Render skills management interface."""
+    st.header("🔧 Skills")
+    st.caption("Manage cryptographically signed skills")
 
-    skills = get_skills_status()
-
-    if not skills:
-        st.info("No skills found in skills/ directory")
-        return
-
-    # Summary
-    valid = sum(1 for s in skills if s.get('signature_valid'))
-    col1, col2, col3 = st.columns(3)
+    col1, col2 = st.columns([2, 1])
 
     with col1:
-        st.metric("Total Skills", len(skills))
-    with col2:
-        st.metric("Valid Signatures", valid)
-    with col3:
-        invalid = len(skills) - valid
-        if invalid > 0:
-            st.metric("Invalid/Unsigned", invalid, delta_color="inverse")
-        else:
-            st.metric("Invalid/Unsigned", 0)
+        try:
+            from safe_skill_creator import SafeSkillCreator
+            creator = SafeSkillCreator()
+            skills = creator.list_skills()
 
-    # Skill list
-    st.subheader("Skill Registry")
+            if skills:
+                for skill in skills:
+                    valid = skill.get('signature_valid', False)
+                    status = "✅ Valid" if valid else "❌ Invalid"
+                    color = "green" if valid else "red"
 
-    for skill in skills:
-        name = skill.get('name', 'Unknown')
-        is_valid = skill.get('signature_valid', False)
-        scan_passed = skill.get('scan_passed', True)
+                    with st.container(border=True):
+                        st.markdown(f"### {skill['name']}")
+                        st.markdown(f"**Signature:** :{color}[{status}]")
 
-        col1, col2, col3 = st.columns([2, 1, 1])
+                        meta = skill.get('metadata', {})
+                        st.caption(f"Version: {meta.get('version', 'N/A')} | Created: {meta.get('created_at', 'N/A')[:10]}")
 
-        with col1:
-            if is_valid:
-                st.write(f"✅ **{name}**")
+                        if st.button("View Code", key=f"view_{skill['name']}"):
+                            st.code(skill.get('code', ''), language="python")
             else:
-                st.write(f"❌ **{name}**")
+                st.info("No skills found. Create one with `aetherclaw sign-skill --create <file>`")
 
-        with col2:
-            sig_status = "Valid" if is_valid else "Invalid"
-            st.write(f"Signature: {sig_status}")
+        except Exception as e:
+            st.error(f"Error: {e}")
 
-        with col3:
-            scan_status = "Passed" if scan_passed else "Failed"
-            st.write(f"Scan: {scan_status}")
+    with col2:
+        st.subheader("Create Skill")
 
-        if 'error' in skill:
-            st.error(f"Error: {skill['error']}")
+        skill_name = st.text_input("Skill Name")
+        skill_code = st.text_area("Python Code", height=200)
 
-        st.markdown("---")
+        if st.button("Sign & Create", use_container_width=True, type="primary"):
+            if skill_name and skill_code:
+                try:
+                    from safe_skill_creator import SafeSkillCreator
+                    creator = SafeSkillCreator()
+
+                    signed = creator.create_skill_from_code(
+                        code=skill_code,
+                        name=skill_name,
+                        description=f"Skill created via dashboard"
+                    )
+                    path = creator.save_skill(signed)
+                    st.success(f"Skill created: {path}")
+                except Exception as e:
+                    st.error(f"Error: {e}")
+            else:
+                st.warning("Enter name and code")
 
 
 def render_swarm():
-    """Render swarm page."""
-    st.header("Swarm Status")
+    """Render swarm orchestration interface."""
+    st.header("🐝 Swarm Orchestration")
+    st.caption("Execute tasks with parallel worker agents")
 
-    # Try to get swarm status
-    try:
-        from swarm.orchestrator import SwarmOrchestrator
+    col1, col2 = st.columns([2, 1])
 
-        orchestrator = SwarmOrchestrator()
-        status = orchestrator.monitor_progress()
+    with col1:
+        task_desc = st.text_area("Task Description", height=100, placeholder="Describe the task for the swarm...")
 
-        col1, col2, col3, col4 = st.columns(4)
+        if st.button("Execute Task", type="primary"):
+            if task_desc:
+                with st.spinner("Running swarm..."):
+                    try:
+                        from swarm.orchestrator import SwarmOrchestrator
+                        from swarm.worker import Task
 
-        with col1:
+                        orchestrator = SwarmOrchestrator()
+                        task = Task(
+                            id=f"task-{datetime.now().strftime('%H%M%S')}",
+                            description=task_desc
+                        )
+                        orchestrator.add_task(task)
+
+                        results = orchestrator.run_until_complete()
+
+                        for completed in results:
+                            st.success(f"Task {completed.id} completed")
+                            if completed.result:
+                                st.json(completed.result)
+                            if completed.error:
+                                st.error(f"Error: {completed.error}")
+
+                    except Exception as e:
+                        st.error(f"Error: {e}")
+            else:
+                st.warning("Enter a task description")
+
+    with col2:
+        st.subheader("Swarm Status")
+
+        try:
+            from swarm.orchestrator import SwarmOrchestrator
+            orchestrator = SwarmOrchestrator()
+            status = orchestrator.monitor_progress()
+
             st.metric("Workers", status.total_workers)
-        with col2:
             st.metric("Active", status.active_workers)
-        with col3:
+            st.metric("Pending", status.pending_tasks)
             st.metric("Completed", status.completed_tasks)
-        with col4:
             st.metric("Failed", status.failed_tasks)
-
-    except Exception as e:
-        st.warning(f"Could not get swarm status: {e}")
-
-    # Swarm controls
-    st.subheader("Swarm Controls")
-
-    st.info("Use the CLI (`aether_claw.py`) to manage swarm operations")
-
-    st.code("""
-# Start a task
-python aether_claw.py swarm --task "Your task here"
-
-# Check status
-python aether_claw.py swarm --status
-    """)
+        except Exception as e:
+            st.error(f"Error: {e}")
 
 
-if __name__ == '__main__':
+def render_logs():
+    """Render audit logs."""
+    st.header("📋 Audit Logs")
+    st.caption("Immutable record of all system actions")
+
+    audit_file = Path(__file__).parent / 'brain' / 'audit_log.md'
+
+    if audit_file.exists():
+        with open(audit_file) as f:
+            content = f.read()
+
+        # Parse entries
+        entries = content.split('### ')[1:] if '### ' in content else []
+
+        # Filter
+        level_filter = st.multiselect(
+            "Filter by level",
+            ["INFO", "WARN", "ERROR", "SECURITY", "AUDIT"],
+            default=["INFO", "WARN", "ERROR"]
+        )
+
+        for entry in entries[-50:]:
+            header = entry.split('\n')[0]
+            if any(f"| {level} |" in header for level in level_filter):
+                if "| ERROR |" in header or "| SECURITY |" in header:
+                    st.error(header)
+                elif "| WARN |" in header:
+                    st.warning(header)
+                else:
+                    st.info(header)
+
+                with st.expander("Details"):
+                    st.code("### " + entry[:1000], language="markdown")
+    else:
+        st.info("No audit log found")
+
+
+def main():
+    """Main dashboard."""
+    init_session_state()
+    render_sidebar()
+
+    # Title
+    st.title("🦅 Aether-Claw Dashboard")
+
+    # Tabs
+    tab1, tab2, tab3, tab4, tab5 = st.tabs([
+        "💬 Chat", "🧠 Memory", "🔧 Skills", "🐝 Swarm", "📋 Logs"
+    ])
+
+    with tab1:
+        render_chat()
+
+    with tab2:
+        render_memory()
+
+    with tab3:
+        render_skills()
+
+    with tab4:
+        render_swarm()
+
+    with tab5:
+        render_logs()
+
+
+if __name__ == "__main__":
     main()

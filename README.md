@@ -2,12 +2,68 @@
 
 A **secure, swarm-based AI assistant** with persistent memory, proactive automation, and cryptographically signed skills.
 
+## Quick Install
+
+```bash
+curl -sSL https://raw.githubusercontent.com/your-repo/aether-claw/main/install.sh | bash
+```
+
+Or manually:
+
+```bash
+git clone https://github.com/your-repo/aether-claw.git ~/.aether-claw
+cd ~/.aether-claw
+pip install -r requirements.txt
+```
+
+## Onboarding
+
+After installation, run the interactive setup:
+
+```bash
+aetherclaw onboard
+```
+
+This will:
+1. Check/configure API keys
+2. Generate RSA keys for skill signing
+3. Index brain memory files
+4. Verify skill signatures
+5. Run system health check
+
+## API Keys
+
+Set your OpenRouter API key (recommended):
+
+```bash
+export OPENROUTER_API_KEY="your-key"
+```
+
+Or add to `~/.aether-claw/.env`:
+
+```
+OPENROUTER_API_KEY=your-key
+```
+
+## Usage
+
+```bash
+aetherclaw status              # View system status
+aetherclaw onboard             # Interactive setup
+aetherclaw heartbeat           # Start scheduled tasks
+aetherclaw heartbeat --run-once  # Run tasks once
+aetherclaw dashboard           # Launch web UI
+aetherclaw swarm -t "task"     # Execute swarm task
+aetherclaw sign-skill --create file.py  # Create signed skill
+aetherclaw verify-skills       # Verify all skill signatures
+```
+
 ## Features
 
 - **Persistent Memory**: Long-term recall via Markdown-based storage with SQLite indexing
 - **Proactive Automation**: Scheduled heartbeat tasks that run autonomously
 - **Multi-Tool Integration**: Shell commands, file management, and API interactions
-- **Skill Extensibility**: Create new skills with cryptographic signing
+- **Skill Extensibility**: Create new skills with cryptographic RSA signing
 - **Local-First Execution**: Runs on your hardware for privacy
 - **Swarm Orchestration**: Multiple AI agents working in parallel
 - **Security Hardened**: Permission boundaries, audit logging, and kill switch
@@ -16,8 +72,8 @@ A **secure, swarm-based AI assistant** with persistent memory, proactive automat
 
 ```
 +-------------------+     +------------------+     +-------------------+
-|   Claude Code     |---->|   Architect      |---->|   GLM-4.7 API     |
-|   (Leader)        |     |   (Reasoning)    |     |   (Tier 1)        |
+|   Claude Code     |---->|   Architect      |---->|   OpenRouter API  |
+|   (Leader)        |     |   (Reasoning)    |     |   claude-3.5      |
 +-------------------+     +------------------+     +-------------------+
                                   |
                                   v
@@ -39,57 +95,10 @@ A **secure, swarm-based AI assistant** with persistent memory, proactive automat
     +---------------------------------------------------+
 ```
 
-## Installation
-
-```bash
-# Clone the repository
-git clone <repository-url>
-cd newclaw
-
-# Install dependencies
-pip install -r requirements.txt
-
-# Generate RSA keys for skill signing
-python aether_claw.py keygen
-
-# Index brain files
-python aether_claw.py index
-```
-
-## Quick Start
-
-### 1. Check System Status
-
-```bash
-python aether_claw.py status
-```
-
-### 2. Run Heartbeat (Proactive Tasks)
-
-```bash
-# Run once
-python aether_claw.py heartbeat --run-once
-
-# Start daemon
-python aether_claw.py heartbeat
-```
-
-### 3. Launch Dashboard
-
-```bash
-python aether_claw.py dashboard
-```
-
-### 4. Execute a Task with Swarm
-
-```bash
-python aether_claw.py swarm --task "Write a Python function to sort a list"
-```
-
 ## Directory Structure
 
 ```
-aether-claw/
+~/.aether-claw/
 ├── brain/                    # Memory system
 │   ├── soul.md              # Identity and goals
 │   ├── user.md              # User preferences
@@ -99,50 +108,32 @@ aether-claw/
 │   └── brain_index.db       # SQLite index (generated)
 ├── skills/                   # Signed skills registry
 ├── swarm/                    # Swarm orchestration
-│   ├── worker.py            # Base worker class
-│   ├── architect.py         # Architect agent
-│   ├── action_worker.py     # Action worker
-│   └── orchestrator.py      # Swarm manager
 ├── tasks/                    # Heartbeat tasks
-│   ├── git_scanner.py       # Git repository scanner
-│   ├── memory_updater.py    # Memory index updater
-│   ├── skill_checker.py     # Skill integrity checker
-│   └── health_monitor.py    # System health monitor
+├── .env                      # API keys (gitignored)
 ├── aether_claw.py           # Main CLI
-├── dashboard.py             # Streamlit dashboard
-├── brain_index.py           # Memory indexer
-├── safe_skill_creator.py    # Skill signing utility
-├── keygen.py                # RSA key generator
-├── kill_switch.py           # Kill switch module
-├── safety_gate.py           # Permission checker
-├── config_loader.py         # Configuration loader
-├── audit_logger.py          # Audit logging
-├── glm_client.py            # GLM API client
-├── notifier.py              # System notifications
-├── heartbeat_daemon.py      # Heartbeat daemon
-├── swarm_config.json        # Main configuration
-├── requirements.txt         # Dependencies
-└── pyproject.toml           # Project config
+└── swarm_config.json        # Configuration
 ```
 
 ## Security Model
 
 ### Skill Signing
 
-All skills must be cryptographically signed before execution:
+All skills must be cryptographically signed with RSA-2048:
 
 ```bash
 # Create and sign a skill
-python aether_claw.py sign-skill --create my_skill.py --name my_skill
+aetherclaw sign-skill --create my_skill.py --name my_skill
+
+# List skills
+aetherclaw sign-skill --list
 
 # Verify all skills
-python aether_claw.py verify-skills
+aetherclaw verify-skills
 ```
 
 ### Safety Gate
 
 Sensitive actions require confirmation:
-
 - File writes
 - Network requests
 - System commands
@@ -151,51 +142,48 @@ Sensitive actions require confirmation:
 ### Kill Switch
 
 Immediate halt on security events:
-
 - Unsigned skill execution
 - Signature verification failure
 - Unauthorized file access
 - Resource anomalies
 
 ```bash
-# Arm the kill switch
-python aether_claw.py kill-switch --arm
-
-# Reset after trigger
-python aether_claw.py kill-switch --reset
+aetherclaw kill-switch --arm     # Arm kill switch
+aetherclaw kill-switch --reset   # Reset after trigger
 ```
 
 ## Configuration
 
 Edit `swarm_config.json` to customize:
-
-- Model routing (GLM endpoints)
+- Model routing
 - Safety gate settings
 - Kill switch triggers
 - Heartbeat interval
 - Swarm worker limits
 
-## API Configuration
+## Heartbeat Tasks
 
-Set your GLM API key:
+Automated tasks that run on a schedule:
 
-```bash
-export GLM_API_KEY="your-api-key"
-```
-
-Or it will use the default configured key.
+| Task | Description |
+|------|-------------|
+| `git_repo_scan` | Scan for git repositories |
+| `memory_index_update` | Update brain index |
+| `skill_integrity_check` | Verify skill signatures |
+| `system_health_check` | Monitor CPU/memory |
+| `task_list_review` | Review task lists |
 
 ## Development
 
 ```bash
+# Install dev dependencies
+pip install -e ".[dev]"
+
 # Run tests
 pytest
 
 # Type checking
 mypy .
-
-# Format code
-black .
 ```
 
 ## License
@@ -204,4 +192,4 @@ MIT License
 
 ## Acknowledgments
 
-Inspired by OpenClaw and built with security as the primary concern.
+Inspired by OpenClaw with security as the primary design concern.

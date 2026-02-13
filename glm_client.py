@@ -24,7 +24,9 @@ logger = logging.getLogger(__name__)
 
 # API Configuration
 DEFAULT_API_KEY = ""  # Set via GLM_API_KEY environment variable
-DEFAULT_BASE_URL = "https://open.bigmodel.cn/api/paas/v4/"
+DEFAULT_BASE_URL = "https://openrouter.ai/api/v1/"
+OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/"
+ZAI_BASE_URL = "https://api.z.ai/api/paas/v4/"
 
 
 class ModelTier(str, Enum):
@@ -42,14 +44,15 @@ class ModelConfig:
 
 
 # Default model configurations
+# Using OpenRouter models - can be changed to Z.ai by setting base_url
 MODEL_CONFIGS = {
     ModelTier.TIER_1_REASONING: ModelConfig(
-        model="GLM-4",
+        model="anthropic/claude-3.5-sonnet",
         max_tokens=4096,
         temperature=0.3
     ),
     ModelTier.TIER_2_ACTION: ModelConfig(
-        model="GLM-4-Flash",
+        model="anthropic/claude-3.5-haiku",
         max_tokens=2048,
         temperature=0.5
     )
@@ -80,9 +83,10 @@ class GLMClient:
 
         Args:
             api_key: API key (defaults to environment or default)
-            base_url: Base URL for API (defaults to standard endpoint)
+            base_url: Base URL for API (defaults to OpenRouter endpoint)
         """
-        self.api_key = api_key or os.environ.get('GLM_API_KEY', DEFAULT_API_KEY)
+        # Prefer OpenRouter API key, fall back to GLM_API_KEY
+        self.api_key = api_key or os.environ.get('OPENROUTER_API_KEY') or os.environ.get('GLM_API_KEY', DEFAULT_API_KEY)
         self.base_url = base_url or DEFAULT_BASE_URL
 
         # Retry configuration
@@ -142,7 +146,9 @@ class GLMClient:
 
         headers = {
             "Content-Type": "application/json",
-            "Authorization": f"Bearer {self.api_key}"
+            "Authorization": f"Bearer {self.api_key}",
+            "HTTP-Referer": "https://github.com/aether-claw",
+            "X-Title": "Aether-Claw"
         }
 
         data = json.dumps(payload).encode('utf-8')

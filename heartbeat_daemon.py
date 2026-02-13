@@ -210,10 +210,10 @@ class HeartbeatDaemon:
             health = check_system_health()
 
             issues = []
-            if health.get('cpu_percent', 0) > 80:
-                issues.append(f"High CPU: {health['cpu_percent']}%")
-            if health.get('memory_percent', 0) > 90:
-                issues.append(f"High Memory: {health['memory_percent']}%")
+            if health.cpu_percent > 80:
+                issues.append(f"High CPU: {health.cpu_percent}%")
+            if health.memory_percent > 90:
+                issues.append(f"High Memory: {health.memory_percent}%")
 
             if issues:
                 return TaskResult(
@@ -229,7 +229,7 @@ class HeartbeatDaemon:
                 success=True,
                 message="System healthy",
                 timestamp=datetime.now().isoformat(),
-                details=str(health)
+                details=f"CPU: {health.cpu_percent}%, Mem: {health.memory_percent}%"
             )
         except ImportError:
             return TaskResult(

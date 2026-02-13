@@ -3,6 +3,10 @@
 # Core
 cryptography>=41.0.0
 bandit>=1.7.0
+python-dotenv>=1.0.0
+
+# TUI
+rich>=13.0.0
 
 # Notifications
 plyer>=2.1.0
