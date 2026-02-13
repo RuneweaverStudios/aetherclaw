@@ -263,33 +263,38 @@ def cmd_onboard(args):
     print("-" * 50)
     print("  Top OpenRouter Models (2026):")
     print()
+    print("  REASONING MODELS:")
     print("  [1] Claude 3.7 Sonnet  - Best overall (recommended)")
-    print("  [2] Claude 3.7 Haiku   - Fast & cheap")
-    print("  [3] Gemini 2.5 Pro     - Google's best")
-    print("  [4] Gemini 2.5 Flash   - Fast & efficient")
+    print("  [2] Claude Opus 4      - Most powerful")
+    print("  [3] GLM 4.7            - Z.AI flagship")
+    print("  [4] Gemini 2.5 Pro     - Google's best")
     print("  [5] GPT-4.1            - OpenAI flagship")
-    print("  [6] DeepSeek V4        - Great value")
-    print("  [7] Llama 4 Maverick   - Meta open source")
-    print("  [8] Custom model ID")
+    print()
+    print("  FAST/CHEAP MODELS:")
+    print("  [6] Claude 3.7 Haiku   - Fast & cheap")
+    print("  [7] Gemini 2.5 Flash   - Fast & efficient")
+    print("  [8] DeepSeek V4        - Great value")
+    print("  [9] Custom model ID")
     print()
 
     try:
-        choice = input("  Select reasoning model [1-8] (default: 1): ").strip() or '1'
+        choice = input("  Select reasoning model [1-9] (default: 1): ").strip() or '1'
     except EOFError:
         choice = '1'
         print("1")
 
     models = {
         '1': 'anthropic/claude-3.7-sonnet',
-        '2': 'anthropic/claude-3.7-haiku',
-        '3': 'google/gemini-2.5-pro-preview',
-        '4': 'google/gemini-2.5-flash-preview',
+        '2': 'anthropic/claude-opus-4',
+        '3': 'z-ai/glm-4.7',
+        '4': 'google/gemini-2.5-pro-preview',
         '5': 'openai/gpt-4.1',
-        '6': 'deepseek/deepseek-chat-v4',
-        '7': 'meta-llama/llama-4-maverick',
+        '6': 'anthropic/claude-3.7-haiku',
+        '7': 'google/gemini-2.5-flash-preview',
+        '8': 'deepseek/deepseek-chat-v4',
     }
 
-    if choice == '8':
+    if choice == '9':
         try:
             reasoning_model = input("  Enter model ID: ").strip()
         except EOFError:
@@ -304,11 +309,13 @@ def cmd_onboard(args):
 
     # Action model
     print("\n  Action model (for fast tasks):")
+    print("  [1-5] Same as reasoning options")
+    print("  [6] Haiku (default)  [7] Flash  [8] DeepSeek")
     try:
-        action_choice = input("  Select [1-7] (default: 2 - Haiku): ").strip() or '2'
+        action_choice = input("  Select [1-8] (default: 6 - Haiku): ").strip() or '6'
     except EOFError:
-        action_choice = '2'
-        print("2")
+        action_choice = '6'
+        print("6")
     action_model = models.get(action_choice, 'anthropic/claude-3.7-haiku')
     print(f"  ✓ Action model: {action_model}")
 
