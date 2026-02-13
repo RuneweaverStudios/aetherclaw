@@ -343,7 +343,6 @@ def cmd_onboard(args):
         action_model = reasoning_model
 
     print(f"  ✓ Action model: {action_model}")
-    print(f"  ✓ Action model: {action_model}")
 
     # Save to config
     config_file = Path(__file__).parent / 'swarm_config.json'
