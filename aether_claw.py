@@ -351,8 +351,10 @@ def cmd_onboard(args):
         import json
         with open(config_file) as f:
             config = json.load(f)
-        config['models']['tier_1_model'] = reasoning_model
-        config['models']['tier_2_model'] = action_model
+        # Update model_routing structure
+        if 'model_routing' in config:
+            config['model_routing']['tier_1_reasoning']['model'] = reasoning_model
+            config['model_routing']['tier_2_action']['model'] = action_model
         with open(config_file, 'w') as f:
             json.dump(config, f, indent=2)
         print("  ✓ Model configuration saved")
