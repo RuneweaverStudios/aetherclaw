@@ -1,0 +1,90 @@
+# Aether-Claw Audit Log
+
+> **Classification**: Immutable Audit Trail
+> **Created**: 2026-02-12
+> **Warning**: DO NOT MODIFY EXISTING ENTRIES
+
+## Purpose
+
+This file maintains an append-only log of all swarm actions for security auditing and accountability. Each entry is timestamped and should be cryptographically verifiable.
+
+---
+
+## Log Format
+
+```
+[TIMESTAMP] [LEVEL] [AGENT] [ACTION] - Details
+```
+
+Levels: INFO | WARN | ERROR | SECURITY | AUDIT
+
+---
+
+## Audit Entries
+
+### 2026-02-12T21:37:00Z | INFO | SYSTEM | INIT - Aether-Claw system initialized
+- Directory structure created
+- Core files generated: soul.md, user.md, memory.md, heartbeat.md
+- Audit logging enabled
+- Signature verification system ready
+
+### 2026-02-12T21:37:00Z | SECURITY | SYSTEM | CONFIG - Security parameters set
+- Safety gate: ENABLED
+- Kill switch: ARMED
+- Confirmation required for: file_write, network, system_command
+- Skill signing: REQUIRED
+
+---
+
+## Log Entry Template
+
+```
+### YYYY-MM-DDTHH:MM:SSZ | LEVEL | AGENT | ACTION - Brief description
+- Detail 1
+- Detail 2
+- Result: [success|failure|pending]
+```
+
+---
+
+## Security Events Log
+
+Track all security-relevant events here:
+
+| Timestamp | Event Type | Agent | Outcome |
+|-----------|------------|-------|---------|
+| 2026-02-12T21:37:00Z | System Init | SYSTEM | Success |
+
+---
+
+## Skill Execution Log
+
+Track all skill loading and execution:
+
+| Timestamp | Skill Name | Signature Valid | Executed By | Outcome |
+|-----------|------------|-----------------|-------------|---------|
+| - | - | - | - | - |
+
+---
+
+## Anomaly Log
+
+Track any detected anomalies:
+
+| Timestamp | Anomaly Type | Severity | Resolution |
+|-----------|--------------|----------|------------|
+| - | - | - | - |
+
+---
+
+## Kill Switch History
+
+Record all kill switch activations:
+
+| Timestamp | Trigger | Initiated By | Duration | Recovery |
+|-----------|---------|--------------|----------|----------|
+| - | - | - | - | - |
+
+---
+
+*This file should only be appended to, never modified. Use brain_index.py to index for search.*
