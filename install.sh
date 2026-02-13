@@ -17,7 +17,7 @@ NC='\033[0m' # No Color
 
 # Default install location
 INSTALL_DIR="${HOME}/.aether-claw"
-REPO_URL="https://github.com/your-repo/aether-claw.git"
+REPO_URL="https://github.com/RuneweaverStudios/aetherclaw.git"
 
 echo -e "${BLUE}"
 echo "    _    _   _    _    ______   ______   _   _      _     "
